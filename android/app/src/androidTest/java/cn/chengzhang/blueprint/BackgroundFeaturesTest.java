@@ -75,14 +75,23 @@ public class BackgroundFeaturesTest {
         return new JSONObject().put("schemaVersion", 1).put("revision", revision).put("spaceId", "test-space").put("deviceId", "test-device")
                 .put("operations", new JSONArray()).put("content", "机密备份内容");
     }
+    private String manualRequest() {
+        String id = java.util.UUID.randomUUID().toString();
+        context.getSharedPreferences("oss-backup-status", 0).edit().putString("manualRequestId", id)
+                .putString("manualState", "queued").putString("manualSuccessAt", "").apply();
+        return id;
+    }
     private OssClient transport(AtomicReference<byte[]> remote, boolean tamper) {
+        return transport(remote, tamper, () -> {});
+    }
+    private OssClient transport(AtomicReference<byte[]> remote, boolean tamper, Runnable uploaded) {
         return new OssClient(url -> new HttpURLConnection(url) {
             @Override public void disconnect() { }
             @Override public boolean usingProxy() { return false; }
             @Override public void connect() { }
             @Override public int getResponseCode() { return 200; }
             @Override public OutputStream getOutputStream() {
-                return new ByteArrayOutputStream() { @Override public void close() { remote.set(toByteArray()); } };
+                return new ByteArrayOutputStream() { @Override public void close() { remote.set(toByteArray()); uploaded.run(); } };
             }
             @Override public InputStream getInputStream() { return new ByteArrayInputStream(tamper ? new byte[]{1} : remote.get()); }
         });
@@ -91,20 +100,114 @@ public class BackgroundFeaturesTest {
         new SecureSettings(context).write(config());
         try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
         AtomicReference<byte[]> remote = new AtomicReference<>();
-        assertFalse(CloudBackup.perform(context, true, new AtomicBoolean(), transport(remote, false)));
+        assertFalse(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), transport(remote, false)));
         JSONObject status = CloudBackup.status(context); assertFalse(status.getString("lastSuccessAt").isEmpty());
         assertEquals(1, status.getLong("lastRevision")); assertFalse(new String(remote.get(), StandardCharsets.UTF_8).contains("机密"));
+        assertEquals("success", status.getString("manualState")); assertEquals(status.getString("lastSuccessAt"), status.getString("manualSuccessAt"));
         try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(2).toString(), 1); }
-        assertTrue(CloudBackup.perform(context, true, new AtomicBoolean(), transport(remote, true)));
+        assertTrue(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), transport(remote, true)));
         assertEquals(1, CloudBackup.status(context).getLong("lastRevision"));
         assertTrue(CloudBackup.status(context).getString("lastError").contains("校验失败"));
+        assertEquals("failed", CloudBackup.status(context).getString("manualState"));
+        assertTrue(CloudBackup.status(context).getString("manualSuccessAt").isEmpty());
     }
-    @Test public void noDataOrDisabledBackupNeverSendsNetworkRequests() throws Exception {
+    @Test public void noDataOrDisabledAutomaticBackupNeverSendsNetworkRequests() throws Exception {
         new SecureSettings(context).write(config());
         OssClient forbidden = new OssClient(url -> { throw new AssertionError("must not connect"); });
-        assertFalse(CloudBackup.perform(context, true, new AtomicBoolean(), forbidden));
+        assertFalse(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), forbidden));
         assertTrue(CloudBackup.status(context).getString("lastSuccessAt").isEmpty());
-        CloudBackup.disable(context); assertFalse(CloudBackup.perform(context, true, new AtomicBoolean(), forbidden));
+        CloudBackup.disable(context);
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        assertFalse(CloudBackup.perform(context, false, "", new AtomicBoolean(), forbidden));
+    }
+    @Test public void savingConfigurationPreservesSwitchAndFirstSetupDefaultsOff() throws Exception {
+        CloudBackup.configure(context, config().put("recoverySaved", true));
+        assertFalse(CloudBackup.status(context).getBoolean("enabled"));
+        assertNull(context.getSystemService(JobScheduler.class).getPendingJob(CloudBackup.DAILY_JOB));
+        CloudBackup.setEnabled(context, true);
+        assertNotNull(context.getSystemService(JobScheduler.class).getPendingJob(CloudBackup.DAILY_JOB));
+        CloudBackup.configure(context, config());
+        assertTrue(CloudBackup.status(context).getBoolean("enabled"));
+        CloudBackup.disable(context); CloudBackup.configure(context, config());
+        assertFalse(CloudBackup.status(context).getBoolean("enabled"));
+    }
+    @Test public void manualJobIsIndependentAndDisablingOnlyCancelsAutomaticJobs() throws Exception {
+        new SecureSettings(context).write(config()); CloudBackup.catchUp(context);
+        String request = CloudBackup.enqueue(context);
+        JobScheduler scheduler = context.getSystemService(JobScheduler.class);
+        JobInfo manual = scheduler.getPendingJob(CloudBackup.NOW_JOB);
+        assertNotNull(manual); assertTrue(manual.isPersisted()); assertEquals(request, manual.getExtras().getString("requestId"));
+        assertEquals(request, CloudBackup.enqueue(context));
+        CloudBackup.disable(context);
+        assertNull(scheduler.getPendingJob(CloudBackup.DAILY_JOB)); assertNull(scheduler.getPendingJob(CloudBackup.CATCH_UP_JOB));
+        assertNotNull(scheduler.getPendingJob(CloudBackup.NOW_JOB));
+        assertEquals(request, CloudBackup.enqueue(context));
+        CloudBackup.forget(context); assertNull(scheduler.getPendingJob(CloudBackup.NOW_JOB));
+    }
+    @Test public void rejectedSchedulerRollsBackAutomaticSwitch() throws Exception {
+        new SecureSettings(context).write(config().put("enabled", false));
+        AtomicBoolean rejected = new AtomicBoolean();
+        Context unavailable = new android.content.ContextWrapper(context) {
+            @Override public Object getSystemService(String name) {
+                if (Context.JOB_SCHEDULER_SERVICE.equals(name) && !rejected.getAndSet(true)) throw new IllegalStateException("test-scheduler-rejection");
+                return super.getSystemService(name);
+            }
+        };
+        try { CloudBackup.setEnabled(unavailable, true); fail("must report scheduling failure"); }
+        catch (IllegalStateException expected) { assertEquals("test-scheduler-rejection", expected.getMessage()); }
+        assertFalse(CloudBackup.status(context).getBoolean("enabled"));
+        assertNull(context.getSystemService(JobScheduler.class).getPendingJob(CloudBackup.DAILY_JOB));
+    }
+    @Test public void manualBackupWorksWithAutomaticSwitchOff() throws Exception {
+        new SecureSettings(context).write(config().put("enabled", false));
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        assertFalse(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), transport(new AtomicReference<>(), false)));
+        JSONObject status = CloudBackup.status(context);
+        assertFalse(status.getBoolean("enabled")); assertEquals("success", status.getString("manualState"));
+        assertFalse(status.getString("manualSuccessAt").isEmpty());
+        assertNull(context.getSystemService(JobScheduler.class).getPendingJob(CloudBackup.DAILY_JOB));
+    }
+    @Test public void automaticSuccessCannotCompleteManualRequestAndStaleRequestCannotUpload() throws Exception {
+        new SecureSettings(context).write(config());
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        String stale = manualRequest(), latest = manualRequest();
+        assertFalse(CloudBackup.perform(context, false, "", new AtomicBoolean(), transport(new AtomicReference<>(), false)));
+        JSONObject status = CloudBackup.status(context);
+        assertFalse(status.getString("lastSuccessAt").isEmpty()); assertEquals("queued", status.getString("manualState"));
+        assertTrue(status.getString("manualSuccessAt").isEmpty());
+        OssClient forbidden = new OssClient(url -> { throw new AssertionError("stale request must not connect"); });
+        assertFalse(CloudBackup.perform(context, true, stale, new AtomicBoolean(), forbidden));
+        assertEquals(latest, CloudBackup.status(context).getString("manualRequestId"));
+    }
+    @Test public void switchingOffDuringManualUploadDoesNotCancelVerification() throws Exception {
+        new SecureSettings(context).write(config());
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        OssClient client = transport(new AtomicReference<>(), false, () -> {
+            try { CloudBackup.disable(context); } catch (Exception e) { throw new AssertionError(e); }
+        });
+        assertFalse(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), client));
+        assertFalse(CloudBackup.status(context).getBoolean("enabled"));
+        assertEquals("success", CloudBackup.status(context).getString("manualState"));
+    }
+    @Test public void switchingOffDuringAutomaticUploadPreventsSuccessMarker() throws Exception {
+        new SecureSettings(context).write(config());
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        OssClient client = transport(new AtomicReference<>(), false, () -> {
+            try { CloudBackup.disable(context); } catch (Exception e) { throw new AssertionError(e); }
+        });
+        assertTrue(CloudBackup.perform(context, false, "", new AtomicBoolean(), client));
+        assertTrue(CloudBackup.status(context).getString("lastSuccessAt").isEmpty());
+    }
+    @Test public void removingConfigurationDuringUploadCannotRestoreStaleSuccess() throws Exception {
+        new SecureSettings(context).write(config());
+        try (EncryptedStore store = new EncryptedStore(context)) { store.save(state(1).toString(), 0); }
+        OssClient client = transport(new AtomicReference<>(), false, () -> {
+            try { CloudBackup.forget(context); } catch (Exception e) { throw new AssertionError(e); }
+        });
+        assertTrue(CloudBackup.perform(context, true, manualRequest(), new AtomicBoolean(), client));
+        JSONObject status = CloudBackup.status(context);
+        assertFalse(status.getBoolean("configured")); assertTrue(status.getString("manualState").isEmpty());
+        assertTrue(status.getString("lastSuccessAt").isEmpty());
     }
     private void waitForCount(int expected) throws Exception {
         for (int i = 0; i < 40; i++) {

@@ -20,6 +20,7 @@ declare global {
       ossStatus(): string;
       configureOss(json: string): string;
       disableOss(): string;
+      setOssAutoBackup(enabled: boolean): string;
       forgetOss(): string;
       backupNow(): string;
       ossRecoveryCode(): string;

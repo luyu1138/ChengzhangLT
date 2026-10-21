@@ -1,0 +1,17 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Growth Blueprint Local Distribution
+Signer #1 certificate SHA-256 digest: 0507a9759ceae301704e7e960c12cf318c5a574ac9807ba59fb269eb4a69dd41
+Signer #1 certificate SHA-1 digest: 2bf36b3c814cb2e46c218286d6923d59207b150e
+Signer #1 certificate MD5 digest: 862fdfd50c0ef3cb7e740d46e08e8a32
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 3072
+Signer #1 public key SHA-256 digest: 0034abc1ac643c567824a574a64176a49e51262ca2ea56b4900f84dd09ceebad
+Signer #1 public key SHA-1 digest: 83a054963909767c82dae2e4ff08e2d1320069a2
+Signer #1 public key MD5 digest: f09d820a9fc19ad0f43c0af7f6f083e4

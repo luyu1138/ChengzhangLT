@@ -11,7 +11,8 @@ public final class OssBackupService extends JobService {
     @Override public boolean onStartJob(JobParameters parameters) {
         AtomicBoolean stopped = new AtomicBoolean(); tasks.put(parameters.getJobId(), stopped);
         new Thread(() -> {
-            boolean retry = CloudBackup.perform(getApplicationContext(), parameters.getJobId() == CloudBackup.NOW_JOB, stopped);
+            boolean retry = CloudBackup.perform(getApplicationContext(), parameters.getJobId() == CloudBackup.NOW_JOB,
+                    parameters.getExtras().getString("requestId", ""), stopped);
             if (tasks.remove(parameters.getJobId(), stopped) && !stopped.get()) jobFinished(parameters, retry);
         }, "oss-daily-backup").start();
         return true;

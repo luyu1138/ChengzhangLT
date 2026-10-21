@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
-import { CloudUpload, RefreshCw, ShieldCheck, Bell } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  CloudUpload,
+  RefreshCw,
+  ShieldCheck,
+  Bell,
+  CircleCheck,
+} from "lucide-react";
 import { Badge, Field, Form, text } from "./components";
 import { recoveryCode } from "./backup";
 import "./storage";
@@ -16,6 +22,10 @@ export interface CloudStatus {
   lastError?: string;
   lastObjectKey?: string;
   lastRevision?: number;
+  manualRequestId?: string;
+  manualState?: "queued" | "running" | "success" | "failed" | "";
+  manualSuccessAt?: string;
+  manualError?: string;
   message?: string;
 }
 const offline: CloudStatus = {
@@ -40,13 +50,20 @@ export function useCloudStatus() {
   }, []);
   useEffect(() => {
     refresh();
-    const timer = setInterval(refresh, 10000);
+    const timer = setInterval(
+      refresh,
+      status.running ||
+        status.manualState === "queued" ||
+        status.manualState === "running"
+        ? 2000
+        : 10000,
+    );
     window.addEventListener("focus", refresh);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [refresh]);
+  }, [refresh, status.running, status.manualState]);
   return { status, refresh };
 }
 function check(result?: string) {
@@ -69,6 +86,25 @@ export function CloudPanel({
   const [error, setError] = useState("");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [accessKeySecret, setAccessKeySecret] = useState("");
+  const successRef = useRef<HTMLDivElement>(null);
+  const previousSuccess = useRef(status.manualSuccessAt);
+  const manualSuccess = Boolean(
+    status.configured &&
+      status.manualRequestId &&
+      status.manualState === "success" &&
+      status.manualSuccessAt &&
+      !status.lastError,
+  );
+  useEffect(() => {
+    if (manualSuccess && previousSuccess.current !== status.manualSuccessAt) {
+      successRef.current?.focus({ preventScroll: true });
+      successRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }
+    previousSuccess.current = status.manualSuccessAt;
+  }, [manualSuccess, status.manualSuccessAt]);
   const act = (action: () => string | undefined, success: string) => {
     try {
       setError("");
@@ -91,6 +127,79 @@ export function CloudPanel({
           </p>
         </div>
       </div>
+      <div className="backup-controls">
+        <div className="backup-switch-row">
+          <div>
+            <strong id="oss-auto-label">每日自动备份</strong>
+            <p id="oss-auto-hint">
+              {!status.configured
+                ? "先保存下方配置，再开启自动备份。"
+                : status.enabled
+                  ? "已开启 · 联网后由系统每天安排备份"
+                  : "已关闭 · 仍可点击立即备份"}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={status.enabled}
+            aria-labelledby="oss-auto-label"
+            aria-describedby="oss-auto-hint"
+            className="backup-switch"
+            disabled={!status.configured || !status.ok}
+            onClick={() =>
+              act(
+                () => window.BlueprintNative?.setOssAutoBackup(!status.enabled),
+                status.enabled
+                  ? "每日自动备份已关闭；仍可手动备份，云端文件会保留。"
+                  : "每日自动备份已开启，等待系统安排上传。",
+              )
+            }
+          >
+            <span />
+          </button>
+        </div>
+        <button
+          className="button primary"
+          disabled={!status.configured || !status.ok || status.running}
+          onClick={() =>
+            act(
+              () => window.BlueprintNative?.backupNow(),
+              "已安排立即备份；无网络时等待联网，上传并回读校验完成后显示结果。",
+            )
+          }
+        >
+          <CloudUpload size={20} />
+          立即备份
+        </button>
+      </div>
+      {manualSuccess && (
+        <div
+          ref={successRef}
+          tabIndex={-1}
+          className="backup-success"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <CircleCheck size={36} aria-hidden="true" />
+          <div>
+            <strong>立即备份成功</strong>
+            <p>已上传到阿里云 OSS，并通过下载回读校验。</p>
+            <time dateTime={status.manualSuccessAt}>
+              {new Date(status.manualSuccessAt!).toLocaleString("zh-CN")}
+            </time>
+          </div>
+        </div>
+      )}
+      {(status.manualState === "queued" ||
+        status.manualState === "running") && (
+        <p className="form-note" role="status">
+          {status.manualState === "queued"
+            ? "立即备份已排队，等待网络和系统调度…"
+            : "正在立即备份：上传并下载回读校验中…"}
+        </p>
+      )}
       <Badge
         tone={
           status.lastError || !status.ok
@@ -107,7 +216,7 @@ export function CloudPanel({
             : !status.configured
               ? "尚未配置 · 自动上传未启用"
               : !status.enabled
-                ? "每日备份已暂停"
+                ? "每日自动备份已关闭"
                 : status.lastError
                   ? "最近备份失败 · 等待重试"
                   : status.lastSuccessAt
@@ -134,12 +243,25 @@ export function CloudPanel({
           </p>
         )}
       </div>
-      {(status.lastError || status.message || error) && (
+      {(status.lastError ||
+        status.manualError ||
+        status.manualState === "failed" ||
+        status.message ||
+        error) && (
         <p className="error-box" role="alert">
-          {error || status.message || status.lastError}
+          {error ||
+            status.message ||
+            (status.manualState === "failed"
+              ? "立即备份未成功：" +
+                (status.manualError ||
+                  status.lastError ||
+                  "请检查网络与 OSS 配置后重试。")
+              : status.lastError)}
         </p>
       )}
       {message &&
+        status.manualState !== "success" &&
+        status.manualState !== "failed" &&
         !(configurationSaved && (status.lastError || status.lastSuccessAt)) && (
           <p role="status" className="form-note">
             {message}
@@ -151,7 +273,7 @@ export function CloudPanel({
         </p>
       )}
       <Form
-        submit={status.configured ? "保存并启用每日备份" : "启用每日 OSS 备份"}
+        submit="保存 OSS 配置"
         onSubmit={async (f) => {
           check(
             window.BlueprintNative?.configureOss(
@@ -170,7 +292,9 @@ export function CloudPanel({
           setError("");
           setConfigurationSaved(true);
           setMessage(
-            "配置已安全保存，首次备份将在网络可用、系统允许时执行。成功前请继续保留本机数据。",
+            status.enabled
+              ? "配置已安全保存，每日自动备份保持开启。成功前请继续保留本机数据。"
+              : "配置已安全保存。可开启每日自动备份，或点击立即备份。",
           );
           refresh();
         }}
@@ -254,30 +378,6 @@ export function CloudPanel({
       </Form>
       {status.configured && (
         <div className="button-row">
-          <button
-            className="button secondary"
-            disabled={!status.enabled || status.running}
-            onClick={() =>
-              act(
-                () => window.BlueprintNative?.backupNow(),
-                "已安排立即备份；无网络时等待联网。可刷新查看结果。",
-              )
-            }
-          >
-            <CloudUpload size={18} />
-            立即备份
-          </button>
-          <button
-            className="button secondary"
-            onClick={() =>
-              act(
-                () => window.BlueprintNative?.disableOss(),
-                "每日备份已暂停；云端已有文件不会删除。",
-              )
-            }
-          >
-            暂停每日备份
-          </button>
           <button
             className="text-button"
             onClick={() => {

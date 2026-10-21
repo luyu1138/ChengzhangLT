@@ -96,7 +96,7 @@ test("OSS setup requires an independently saved recovery code and stays honest i
   await page.getByLabel("RAM AccessKey Secret").fill("TestOnlySecret1234");
   await page.getByRole("checkbox").check();
   await page
-    .getByRole("button", { name: "启用每日 OSS 备份", exact: true })
+    .getByRole("button", { name: "保存 OSS 配置", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText("Android");
   await expect(page.getByText("尚无成功备份")).toBeVisible();
@@ -107,113 +107,186 @@ test("OSS setup requires an independently saved recovery code and stays honest i
   await expect(page.getByLabel("RAM AccessKey Secret")).toHaveValue("");
 });
 
-test("OSS native status and configuration UI preserve secrets and do not claim success on scheduling", async ({
-  page,
-}) => {
-  await person(page);
-  // A bridge contract double for UI only; the transport and Android scheduler have separate tests.
-  await page.evaluate(() => {
+async function installCloudBridge(page: Page, configured = false) {
+  // UI bridge contract double; Android scheduling and verified transport are tested separately.
+  await page.evaluate((configured) => {
     const status = {
       ok: true,
-      configured: false,
+      configured,
       enabled: false,
       running: false,
+      bucket: configured ? "blueprint-test-only" : "",
+      region: "cn-hangzhou",
       lastSuccessAt: "",
+      lastError: "",
+      manualRequestId: "",
+      manualState: "",
+      manualSuccessAt: "",
+      manualError: "",
     };
-    const bridge = {
+    let requests = 0;
+    window.BlueprintNative = {
       ossStatus: () => JSON.stringify(status),
       configureOss: (raw: string) => {
         const config = JSON.parse(raw);
-        if (!config.recoverySaved)
+        if (!status.configured && !config.recoverySaved)
           return JSON.stringify({ ok: false, message: "请保存恢复码" });
         Object.assign(status, {
           configured: true,
-          enabled: true,
           bucket: config.bucket,
           region: config.region,
         });
         return '{"ok":true}';
       },
-      disableOss: () => {
-        status.enabled = false;
+      setOssAutoBackup: (enabled: boolean) => {
+        status.enabled = enabled;
         return '{"ok":true}';
       },
-      backupNow: () => '{"ok":true}',
+      backupNow: () => {
+        Object.assign(status, {
+          manualRequestId: `request-${++requests}`,
+          manualState: "queued",
+          manualSuccessAt: "",
+          manualError: "",
+          lastError: "",
+        });
+        return JSON.stringify({ ok: true, requestId: status.manualRequestId });
+      },
       ossRecoveryCode: () => '{"ok":true,"code":"TEST-RECOVERY-CODE"}',
       forgetOss: () => {
-        status.configured = false;
-        status.enabled = false;
-        return '{"ok":true}';
-      },
-    };
-    window.BlueprintNative = bridge as unknown as NonNullable<
-      Window["BlueprintNative"]
-    >;
-  });
-  await page.locator(".local-status").click();
-  await page.getByLabel("OSS Bucket 名称").fill("blueprint-test-only");
-  await page.getByLabel("RAM AccessKey ID").fill("TestOnlyAccessKey1234");
-  await page.getByLabel("RAM AccessKey Secret").fill("TestOnlySecret1234");
-  await page.getByRole("checkbox").check();
-  await page
-    .getByRole("button", { name: "启用每日 OSS 备份", exact: true })
-    .click();
-  await expect(
-    page.getByText("已安排 · 等待首次备份", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("尚无成功备份")).toBeVisible();
-  await expect(page.getByLabel("RAM AccessKey Secret")).toHaveValue("");
-  await page.getByRole("button", { name: "立即备份", exact: true }).click();
-  await expect(page.getByText("尚无成功备份")).toBeVisible();
-  await page.getByRole("button", { name: "暂停每日备份", exact: true }).click();
-  await expect(page.getByText("每日备份已暂停", { exact: true })).toBeVisible();
-});
-
-test("OSS failure shows diagnostic status instead of waiting or configuration success", async ({
-  page,
-}) => {
-  await person(page);
-  await page.evaluate(() => {
-    const status = {
-      ok: true,
-      configured: false,
-      enabled: false,
-      running: false,
-      lastSuccessAt: "",
-      lastError: "",
-    };
-    window.BlueprintNative = {
-      ossStatus: () => JSON.stringify(status),
-      configureOss: () => {
-        Object.assign(status, {
-          configured: true,
-          enabled: true,
-          bucket: "blueprint-test-only",
-          region: "cn-hangzhou",
-          lastError:
-            "HTTP 403 · 上传（PUT） · AccessDenied：检查 oss:PutObject 权限。\n请求编号：0123456789ABCDEF01234567",
-        });
+        Object.assign(status, { configured: false, enabled: false });
         return '{"ok":true}';
       },
     } as unknown as NonNullable<Window["BlueprintNative"]>;
-  });
+    window.addEventListener("oss-test-update", (event) => {
+      Object.assign(status, (event as CustomEvent).detail);
+      window.dispatchEvent(new Event("focus"));
+    });
+    window.dispatchEvent(new Event("focus"));
+  }, configured);
+}
+async function updateCloud(page: Page, fields: Record<string, unknown>) {
+  await page.evaluate(
+    (detail) =>
+      window.dispatchEvent(new CustomEvent("oss-test-update", { detail })),
+    fields,
+  );
+}
+
+test("OSS switch persists across panel reopen and manual backup stays available with automatic backup off", async ({
+  page,
+}) => {
+  await person(page);
+  await installCloudBridge(page);
   await page.locator(".local-status").click();
+  const toggle = page.getByRole("switch", { name: "每日自动备份" });
+  await expect(toggle).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "立即备份", exact: true }),
+  ).toBeDisabled();
   await page.getByLabel("OSS Bucket 名称").fill("blueprint-test-only");
   await page.getByLabel("RAM AccessKey ID").fill("TestOnlyAccessKey1234");
   await page.getByLabel("RAM AccessKey Secret").fill("TestOnlySecret1234");
   await page.getByRole("checkbox").check();
   await page
-    .getByRole("button", { name: "启用每日 OSS 备份", exact: true })
+    .getByRole("button", { name: "保存 OSS 配置", exact: true })
     .click();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByLabel("RAM AccessKey Secret")).toHaveValue("");
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await expect(
+    page.getByText("已安排 · 等待首次备份", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.locator(".local-status").click();
+  await expect(toggle).toBeChecked();
+  await page
+    .getByRole("button", { name: "保存 OSS 配置", exact: true })
+    .click();
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await page.getByRole("button", { name: "立即备份", exact: true }).click();
+  await expect(page.getByText("尚无成功备份")).toBeVisible();
+  await expect(page.locator(".backup-success")).toHaveCount(0);
+  await expect(
+    page.getByText("立即备份已排队，等待网络和系统调度…"),
+  ).toBeVisible();
+});
+
+test("manual success is prominent only after this request verifies, and clears for a new request", async ({
+  page,
+}) => {
+  await person(page);
+  await installCloudBridge(page, true);
+  await page.locator(".local-status").click();
+  const backup = page.getByRole("button", { name: "立即备份", exact: true });
+  await backup.click();
+  // An old/automatic success timestamp must not complete a pending manual request.
+  await updateCloud(page, { lastSuccessAt: "2026-10-20T06:00:00Z" });
+  await expect(page.locator(".backup-success")).toHaveCount(0);
+  await updateCloud(page, { running: true, manualState: "running" });
+  await expect(backup).toBeDisabled();
+  await expect(page.locator(".backup-success")).toHaveCount(0);
+  await updateCloud(page, {
+    running: false,
+    manualState: "success",
+    lastSuccessAt: "2026-10-21T07:34:00Z",
+    manualSuccessAt: "2026-10-21T07:34:00Z",
+  });
+  const success = page.locator(".backup-success");
+  await expect(success).toContainText("立即备份成功");
+  await expect(success).toContainText("通过下载回读校验");
+  await expect(success).toBeFocused();
+  await expect(success.locator("time")).toHaveAttribute(
+    "datetime",
+    "2026-10-21T07:34:00Z",
+  );
+  await expect(
+    page.getByRole("switch", { name: "每日自动备份" }),
+  ).not.toBeChecked();
+  await page.screenshot({
+    path: "test-results/oss-backup-success.png",
+    fullPage: true,
+  });
+  await page.addStyleTag({ content: ":root{font-size:32px}" });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await backup.click();
+  await expect(success).toHaveCount(0);
+  await expect(
+    page.getByText("立即备份已排队，等待网络和系统调度…"),
+  ).toBeVisible();
+});
+
+test("OSS failure retains diagnostics and never claims manual success", async ({
+  page,
+}) => {
+  await person(page);
+  await installCloudBridge(page, true);
+  await page.locator(".local-status").click();
+  await page.getByRole("switch", { name: "每日自动备份" }).click();
+  await page.getByRole("button", { name: "立即备份", exact: true }).click();
+  const error =
+    "HTTP 403 · 上传（PUT） · AccessDenied：检查 oss:PutObject 权限。\n请求编号：0123456789ABCDEF01234567";
+  await updateCloud(page, {
+    manualState: "failed",
+    lastError: error,
+    manualError: error,
+  });
   await expect(
     page.getByText("最近备份失败 · 等待重试", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("已安排 · 等待首次备份", { exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText(/配置已安全保存，首次备份/)).toHaveCount(0);
-  await expect(page.getByRole("alert")).toContainText("AccessDenied");
-  await expect(page.getByRole("alert")).toContainText(
+  await expect(page.locator(".backup-success")).toHaveCount(0);
+  await expect(page.getByRole("alert").first()).toContainText("立即备份未成功");
+  await expect(page.getByRole("alert").first()).toContainText(
     "0123456789ABCDEF01234567",
   );
   await expect(page.getByText("尚无成功备份")).toBeVisible();
@@ -223,4 +296,25 @@ test("OSS failure shows diagnostic status instead of waiting or configuration su
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("a rejected automatic switch change keeps the saved state", async ({
+  page,
+}) => {
+  await person(page);
+  await installCloudBridge(page, true);
+  await page.evaluate(() => {
+    window.BlueprintNative!.setOssAutoBackup = () =>
+      '{"ok":false,"message":"系统未接受每日备份任务，请重试"}';
+  });
+  await page.locator(".local-status").click();
+  const toggle = page.getByRole("switch", { name: "每日自动备份" });
+  await expect(toggle).toBeEnabled();
+  await toggle.focus();
+  await page.keyboard.press("Space");
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole("alert")).toContainText("系统未接受");
+  await expect(
+    page.getByRole("button", { name: "立即备份", exact: true }),
+  ).toBeEnabled();
 });

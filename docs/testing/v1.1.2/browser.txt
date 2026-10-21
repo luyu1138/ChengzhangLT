@@ -1,0 +1,42 @@
+
+> growth-blueprint@1.1.2 test:e2e
+> playwright test
+
+[WebServer] (node:111415) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:111428) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 15 tests using 1 worker
+
+(node:111450) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:111450) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/app.spec.ts:78:1 › multi-person CRUD and encrypted persistence across full reload (2.3s)
+  ✓   2 e2e/app.spec.ts:106:1 › nonzero baseline result progress and manual acceptance (2.3s)
+  ✓   3 e2e/app.spec.ts:136:1 › task completion, undo and reload preserve independent action progress (1.6s)
+  ✓   4 e2e/app.spec.ts:169:1 › published review remains frozen after new observations and adjustment (2.5s)
+  ✓   5 e2e/app.spec.ts:208:1 › encrypted export, wrong-key rejection and authenticated restore preview (1.7s)
+  ✓   6 e2e/app.spec.ts:254:1 › archive, trash and restore retain history; cloud state stays honest (1.4s)
+  ✓   7 e2e/app.spec.ts:291:1 › large text layout keeps navigation and forms operable without horizontal overflow (1.2s)
+  ✓   8 e2e/app.spec.ts:312:1 › goal adjustment previews the effect and preserves a visible version history (2.0s)
+  ✓   9 e2e/app.spec.ts:350:1 › evidence attachment is person-scoped and included in authenticated backup (1.4s)
+  ✓  10 e2e/fixed-plans.spec.ts:16:1 › sky-blue fixed daily, weekly and monthly plans keep completion history after reload (2.7s)
+  ✓  11 e2e/fixed-plans.spec.ts:92:1 › OSS setup requires an independently saved recovery code and stays honest in browser preview (1.4s)
+  ✓  12 e2e/fixed-plans.spec.ts:189:1 › OSS switch persists across panel reopen and manual backup stays available with automatic backup off (1.7s)
+  ✓  13 e2e/fixed-plans.spec.ts:239:1 › manual success is prominent only after this request verifies, and clears for a new request (1.6s)
+  ✓  14 e2e/fixed-plans.spec.ts:287:1 › OSS failure retains diagnostics and never claims manual success (1.2s)
+  ✓  15 e2e/fixed-plans.spec.ts:321:1 › a rejected automatic switch change keeps the saved state (1.1s)
+
+  15 passed (28.4s)
+
+To open last HTML report run:
+
+  npx playwright show-report
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

@@ -99,8 +99,9 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public String ossStatus(){try{return CloudBackup.status(MainActivity.this).toString();}catch(Exception e){return failure("OSS 安全配置无法读取，请保留恢复码，移除本机配置后重新连接");}}
         @JavascriptInterface public String configureOss(String json){try{if(json.length()>8192)return failure("OSS 配置过长");CloudBackup.configure(MainActivity.this,new JSONObject(json));return ok();}catch(IllegalArgumentException e){return failure(e.getMessage());}catch(Exception e){return failure("保存 OSS 配置或安排任务失败，请检查配置后重试");}}
         @JavascriptInterface public String disableOss(){try{CloudBackup.disable(MainActivity.this);return ok();}catch(Exception e){return failure("关闭备份失败，请重试");}}
+        @JavascriptInterface public String setOssAutoBackup(boolean enabled){try{CloudBackup.setEnabled(MainActivity.this,enabled);return ok();}catch(Exception e){return failure("切换自动备份失败，请确认已保存配置后重试");}}
         @JavascriptInterface public String forgetOss(){try{CloudBackup.forget(MainActivity.this);return ok();}catch(Exception e){return failure("移除本机配置失败，请重试");}}
-        @JavascriptInterface public String backupNow(){try{CloudBackup.enqueue(MainActivity.this);return ok();}catch(Exception e){return failure("无法安排备份，请先配置并启用 OSS；无网络时会等待联网");}}
+        @JavascriptInterface public String backupNow(){try{return new JSONObject().put("ok",true).put("requestId",CloudBackup.enqueue(MainActivity.this)).toString();}catch(Exception e){return failure("无法安排备份，请确认已保存 OSS 配置；无网络时会等待联网");}}
         @JavascriptInterface public String ossRecoveryCode(){try{return new JSONObject().put("ok",true).put("code",CloudBackup.recoveryCode(MainActivity.this)).toString();}catch(Exception e){return failure("恢复码无法读取，请检查本机 OSS 配置");}}
         @JavascriptInterface public void setPrivacy(boolean enabled){runOnUiThread(()->{if(enabled)getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);});}
         @JavascriptInterface public void exportFile(String name,String mime,String encoded){

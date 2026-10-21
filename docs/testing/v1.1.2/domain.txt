@@ -1,0 +1,56 @@
+
+> growth-blueprint@1.1.2 test
+> tsx --test tests/*.test.ts
+
+✔ attachments are encrypted in backup and verified during restore (32.583349ms)
+✔ wrong attachment digest and unsupported file content are rejected (4.838962ms)
+✔ import rejects pathological repeat counts before rendering instances (1.747375ms)
+✔ A01: independent IDs for three people, including equal display names (23.748144ms)
+✔ other-person profile requires authorization; nickname and timezone validation (1.3911ms)
+✔ A02: cross-person goal references fail for observations and actions (4.329325ms)
+✔ A03: long-term and annual goal relation, date constraints and cycle detection (2.694158ms)
+✔ A04: nonzero baseline and lower-is-better formulas (1.360584ms)
+✔ equal baseline and target are rejected, progress is clamped (0.769186ms)
+✔ A05: weighted annual aggregation is 63% (1.162116ms)
+✔ A06: missing data stays null and partial coverage never treats it as zero (0.834264ms)
+✔ parent and child are not double-counted in annual set (0.91184ms)
+✔ challenge goals are excluded by default; paused targets retain annual scope (1.032632ms)
+✔ milestones only count accepted weights; frequency and custom scale formulas (1.53068ms)
+✔ state observation uses event time, not entry time (1.389868ms)
+✔ equal observation times conflict and require explicit resolution (0.627083ms)
+✔ A07: weekly quota does not enter Monday overdue denominator (1.272231ms)
+✔ A08 local: completion is idempotent and undo preserves operation history (1.196488ms)
+✔ weekly habits disallow counting multiple slots on same day (1.263058ms)
+✔ future instances never count as complete; overdue tasks stay out of today (0.500592ms)
+✔ rescheduling preserves original date and count, removing old date display (0.455375ms)
+✔ repeating rules cover weekdays, monthly short months, custom intervals (0.374884ms)
+✔ fixed plans accept valid reminder times and reject malformed times without committing (1.409347ms)
+✔ daily, weekly and monthly completion records retain independent instance IDs and timestamps (0.994013ms)
+✔ old backups without reminder fields and new fixed-plan backups both restore (28.358322ms)
+✔ archive suspends future instances and restoration preserves stable IDs (0.912752ms)
+✔ A15/A16: published review snapshot survives goal adjustment and backfill (1.935919ms)
+✔ goal completion requires result acceptance; dates and weights validate (0.879191ms)
+✔ A22: permanent deletion clears related entities and their operation payloads (0.755555ms)
+✔ A18: authenticated encrypted backup roundtrip preserves all state and logs (3.891817ms)
+✔ A19: wrong key or tampered ciphertext is rejected without touching source (2.204082ms)
+✔ A21: newer schema and cross-person imported references are rejected (1.245242ms)
+✔ CSV export is person-scoped, quoted and safe against formula injection (0.627493ms)
+✔ local dates respect archive timezone rather than device timezone (0.332589ms)
+✔ cumulative measurements sum real deltas over the baseline (0.559621ms)
+✔ annual scope changes require goal revision; archive alone does not remove results (0.590547ms)
+✔ rescheduling does not erase original period commitments from review denominator (0.467563ms)
+✔ a unit or measurement change never implicitly converts old observations (0.51247ms)
+✔ parent date adjustment must continue containing existing children (0.575425ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 410.752855
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice

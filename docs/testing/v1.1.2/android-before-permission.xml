@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="cn.chengzhang.blueprint.EncryptedStoreTest" tests="18" failures="1" errors="0" skipped="0" time="37.338" timestamp="2026-10-21T07:56:10" hostname="localhost">
+  <properties>
+    <property name="device" value="emulator-5554 - 15" />
+    <property name="flavor" value="" />
+    <property name="project" value=":app" />
+  </properties>
+  <testcase name="malformedOperationRollsBackSnapshotAndOutbox" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.993" />
+  <testcase name="authenticatedCiphertextRejectsCorruption" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.659" />
+  <testcase name="survivesCloseAndReopenWithEncryptedOutbox" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.832" />
+  <testcase name="staleRevisionCannotOverwriteAndNonceIsFresh" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="1.006" />
+  <testcase name="switchingOffDuringAutomaticUploadPreventsSuccessMarker" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="2.366" />
+  <testcase name="removingConfigurationDuringUploadCannotRestoreStaleSuccess" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.79" />
+  <testcase name="dailyJobIsPersistedAndNetworkConstrainedAndDisableCancelsIt" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.286" />
+  <testcase name="credentialsAreKeystoreEncryptedAndStatusNeverReturnsSecrets" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="0.581" />
+  <testcase name="switchingOffDuringManualUploadDoesNotCancelVerification" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="3.175" />
+  <testcase name="rejectedSchedulerRollsBackAutomaticSwitch" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.032" />
+  <testcase name="manualBackupWorksWithAutomaticSwitchOff" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="2.476" />
+  <testcase name="noDataOrDisabledAutomaticBackupNeverSendsNetworkRequests" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.945" />
+  <testcase name="manualJobIsIndependentAndDisablingOnlyCancelsAutomaticJobs" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.434" />
+  <testcase name="backgroundUploadReadsEncryptedStoreAndMarksSuccessOnlyAfterVerification" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="3.699" />
+  <testcase name="damagedSettingsFailClosedAndCanBeExplicitlyRemoved" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="0.509" />
+  <testcase name="savingConfigurationPreservesSwitchAndFirstSetupDefaultsOff" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.312" />
+  <testcase name="automaticSuccessCannotCompleteManualRequestAndStaleRequestCannotUpload" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="1.119" />
+  <testcase name="duePlanNotifiesOnceAndCompletingItCancelsVisibleNotification" classname="cn.chengzhang.blueprint.BackgroundFeaturesTest" time="0.208">
+    <failure>java.lang.AssertionError: Grant POST_NOTIFICATIONS to the test installation before running
+at org.junit.Assert.fail(Assert.java:89)
+at org.junit.Assert.assertTrue(Assert.java:42)
+at cn.chengzhang.blueprint.BackgroundFeaturesTest.duePlanNotifiesOnceAndCompletingItCancelsVisibleNotification(BackgroundFeaturesTest.java:220)
+</failure>
+  </testcase>
+</testsuite>
