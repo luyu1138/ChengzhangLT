@@ -326,6 +326,56 @@ test("repeating rules cover weekdays, monthly short months, custom intervals", (
   assert.equal(D.scheduled(a, "2026-10-03"), true);
   assert.equal(D.scheduled(a, "2026-10-04"), false);
 });
+test("fixed plans accept valid reminder times and reject malformed times without committing", () => {
+  const { s, id } = fixture();
+  for (const kind of ["daily", "weekdays", "monthly"] as const) {
+    const a = action(s, id, kind);
+    D.saveAction(s, { ...a, reminderTime: "09:30" });
+    assert.equal(s.actions.find((v) => v.id === a.id)?.reminderTime, "09:30");
+    const revision = s.revision;
+    for (const invalid of ["24:00", "09:60", "9:30", "garbage"])
+      assert.throws(
+        () => D.saveAction(s, { ...a, reminderTime: invalid }),
+        /提醒时间/,
+      );
+    assert.equal(s.revision, revision);
+  }
+});
+test("daily, weekly and monthly completion records retain independent instance IDs and timestamps", () => {
+  const { s, id } = fixture();
+  const date = D.localDate(D.personOf(s, id).timezone);
+  for (const kind of ["daily", "weekdays", "monthly"] as const) {
+    const a = action(s, id, kind, date);
+    a.repeat.weekdays = [new Date(date + "T12:00:00Z").getUTCDay()];
+    a.repeat.monthDay = Number(date.slice(8));
+  }
+  const instances = D.instancesOn(s, id, date);
+  assert.equal(instances.length, 3);
+  for (const instance of instances) D.completeInstance(s, instance, true);
+  assert.equal(s.instances.filter((i) => i.done && i.completedAt).length, 3);
+  assert.equal(new Set(s.instances.map((i) => i.id)).size, 3);
+  D.completeInstance(s, instances[0], false);
+  assert.equal(s.instances.filter((i) => i.done).length, 2);
+  assert.ok(s.operations.some((op) => op.kind === "action.undo"));
+  assert.equal(
+    D.instancesOn(s, id, D.addDays(date, 1)).filter((i) => i.done).length,
+    0,
+  );
+});
+test("old backups without reminder fields and new fixed-plan backups both restore", async () => {
+  const { s, id } = fixture();
+  const a = action(s, id, "daily");
+  assert.equal(
+    D.validateState(structuredClone(s)).actions[0].reminderTime,
+    undefined,
+  );
+  D.saveAction(s, { ...a, reminderTime: "23:30" });
+  const code = recoveryCode();
+  const restored = await decryptBackup(await encryptBackup(s, code), code);
+  assert.equal(restored.actions[0].reminderTime, "23:30");
+  restored.actions[0].reminderTime = "25:00";
+  assert.throws(() => D.validateState(restored), /行动数据无效/);
+});
 test("archive suspends future instances and restoration preserves stable IDs", () => {
   const { s, id, date } = fixture();
   action(s, id, "daily");

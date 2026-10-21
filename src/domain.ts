@@ -104,6 +104,8 @@ export interface Action {
   date: string;
   end?: string;
   minutes: number;
+  /** Wall-clock time in the owning person's timezone; absent means no reminder. */
+  reminderTime?: string;
   repeat: Repeat;
   paused: boolean;
   createdAt: string;
@@ -916,6 +918,11 @@ export function saveAction(s: State, input: Action) {
   );
   const r = input.repeat;
   requireThat(
+    input.reminderTime === undefined ||
+      /^([01]\d|2[0-3]):[0-5]\d$/.test(input.reminderTime),
+    "提醒时间需为有效的时:分",
+  );
+  requireThat(
     ["once", "daily", "weekdays", "weekly", "monthly", "interval"].includes(
       r.kind,
     ),
@@ -1356,6 +1363,8 @@ export function validateState(value: unknown): State {
   for (const a of s.actions) {
     requireThat(
       typeof a.title === "string" &&
+        (a.reminderTime === undefined ||
+          /^([01]\d|2[0-3]):[0-5]\d$/.test(a.reminderTime)) &&
         validDate(a.date) &&
         a.repeat &&
         Number.isInteger(a.repeat.version) &&

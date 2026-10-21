@@ -167,8 +167,11 @@ test("archive, trash and restore retain history; cloud state stays honest", asyn
   await page.getByRole("button", { name: "恢复", exact: true }).click();
   await page.getByLabel("关闭", { exact: true }).click();
   await expect(page.locator(".person-card")).toHaveCount(1);
-  await page.getByRole("button", { name: /仅保存在本机/ }).click();
-  await expect(page.getByText("阿里云盘同步未开放")).toBeVisible();
+  await page.getByRole("button", { name: /本机已保存.*OSS 未启用/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "阿里云 OSS 每日备份" }),
+  ).toBeVisible();
+  await expect(page.getByText("尚无成功备份")).toBeVisible();
 });
 test("large text layout keeps navigation and forms operable without horizontal overflow", async ({
   page,

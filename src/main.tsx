@@ -71,6 +71,7 @@ import {
   type Save,
 } from "./forms";
 import "./style.css";
+import { CloudPanel, PlanReminderSettings, useCloudStatus } from "./cloud";
 
 type Tab = "home" | "plans" | "actions" | "reviews";
 type Panel =
@@ -79,7 +80,7 @@ type Panel =
   | { type: "goal-form"; id?: string; personId: string }
   | { type: "goal"; id: string }
   | { type: "goal-stop"; id: string }
-  | { type: "action-form"; personId: string; goalId?: string }
+  | { type: "action-form"; personId: string; goalId?: string; fixed?: boolean }
   | { type: "record"; personId: string; goalId?: string }
   | { type: "review-form"; personId: string; id?: string }
   | { type: "review"; id: string }
@@ -129,7 +130,9 @@ function App() {
     [sort, setSort] = useState("custom"),
     [horizon, setHorizon] = useState("all"),
     [actionDate, setActionDate] = useState(D.localDate()),
-    [actionFilter, setActionFilter] = useState("today");
+    [actionFilter, setActionFilter] = useState("today"),
+    [historyMonth, setHistoryMonth] = useState(D.localDate().slice(0, 7));
+  const cloud = useCloudStatus();
   const stateRef = useRef<D.State | null>(null),
     saving = useRef(false);
   useEffect(() => {
@@ -141,8 +144,31 @@ function App() {
           s.persons.find((p) => !p.deletedAt && !p.archivedAt)?.id ?? "",
         );
         window.BlueprintNative?.setPrivacy(s.settings.screenPrivacy);
+        if (window.BlueprintNative) {
+          const info = JSON.parse(window.BlueprintNative.appInfo());
+          if (info.openActions) {
+            setTab("actions");
+            setSelected(info.openPersonId || "all");
+            if (typeof info.openDate === "string" && D.validDate(info.openDate))
+              setActionDate(info.openDate);
+          }
+        }
       })
       .catch((e) => setLoadError(e.message));
+  }, []);
+  useEffect(() => {
+    const open = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ personId?: string; date?: string }>
+      ).detail;
+      setPanel(null);
+      setTab("actions");
+      setSelected(detail?.personId || "all");
+      if (detail?.date && D.validDate(detail.date)) setActionDate(detail.date);
+      setActionFilter("today");
+    };
+    window.addEventListener("blueprint-open-actions", open);
+    return () => window.removeEventListener("blueprint-open-actions", open);
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -473,7 +499,10 @@ function App() {
             {goal?.title ?? "独立行动"} <span>· {a.minutes} 分钟</span>
           </p>
           <small>
-            {p.name}{" "}
+            {p.name} {a.reminderTime ? ` · ${a.reminderTime} 提醒` : ""}
+            {i.done && i.completedAt
+              ? ` · 完成于 ${new Date(i.completedAt).toLocaleString("zh-CN", { timeZone: p.timezone })}`
+              : ""}
             {i.period.startsWith("week:")
               ? "· 本周次数，不提前判断逾期"
               : i.date < today
@@ -533,11 +562,15 @@ function App() {
       );
     if (panel.type === "action-form")
       return (
-        <Modal title="安排一个行动" onClose={close}>
+        <Modal
+          title={panel.fixed ? "添加个人固定计划" : "安排一个行动"}
+          onClose={close}
+        >
           <ActionForm
             state={st}
             personId={panel.personId}
             goalId={panel.goalId}
+            fixed={panel.fixed}
             save={save}
             onDone={close}
           />
@@ -1229,38 +1262,8 @@ function App() {
       );
     if (panel.type === "sync")
       return (
-        <Modal title="云盘与同步" onClose={close}>
-          <div className="cloud-empty">
-            <CloudOff size={40} />
-            <h3>阿里云盘同步未开放</h3>
-            <p>
-              当前版本仅保存在本机。云盘功能需待应用审核与场景准入通过后接入。
-            </p>
-            <Badge tone="amber">尚未连接 · 未上传任何成长数据</Badge>
-          </div>
-          <div className="detail-facts">
-            <p>
-              <span>本地变更日志</span>
-              {st.operations.length} 条
-            </p>
-            <p>
-              <span>云端备份</span>尚无
-            </p>
-            <p>
-              <span>多设备自动同步</span>暂不可用
-            </p>
-          </div>
-          <div className="form-note">
-            <ShieldCheck size={20} />
-            现在可以创建加密备份，使用独立恢复码手动迁移。手动备份与云盘自动同步分别管理。
-          </div>
-          <button
-            className="button primary full"
-            onClick={() => setPanel({ type: "backup" })}
-          >
-            <Download size={18} />
-            创建加密备份
-          </button>
+        <Modal title="阿里云 OSS 每日备份" onClose={close}>
+          <CloudPanel status={cloud.status} refresh={cloud.refresh} />
         </Modal>
       );
     if (panel.type === "recycle") {
@@ -1324,7 +1327,7 @@ function App() {
                     onClick={() =>
                       confirm(
                         "彻底删除本机数据？",
-                        `将永久清除“${p.name}”的本机档案、目标、行动、进展、复盘及相关日志。已导出或复制的备份仍可能包含该人物，需你自行清理；当前未连接云盘，无云端清理操作。此操作不可撤销。`,
+                        `将永久清除“${p.name}”的本机档案、目标、行动、进展、复盘及相关日志。已导出或复制的备份仍可能包含该人物，需你自行清理；OSS 中的历史备份不会自动删除，需你自行清理。此操作不可撤销。`,
                         () =>
                           save(
                             (s) => D.purgePerson(s, p.id),
@@ -1355,7 +1358,10 @@ function App() {
           >
             <CloudOff />
             <span>
-              阿里云盘<span>未开放 · 仅保存在本机</span>
+              阿里云 OSS
+              <span>
+                {cloud.status.enabled ? "每日自动加密备份" : "配置每日自动备份"}
+              </span>
             </span>
             <ChevronRight />
           </button>
@@ -1413,7 +1419,8 @@ function App() {
           </label>
           <p className="muted small">
             本机数据库中的成长内容使用 AES-256-GCM 加密，密钥由 Android Keystore
-            保护。系统自动备份已关闭。卸载应用会丢失本机数据，请定期创建加密备份。
+            保护。Android 系统自带备份已关闭，OSS
+            每日备份需另行启用。卸载会丢失本机数据，请定期确认云端备份成功或手动导出。
           </p>
         </div>
         <div className="settings-group">
@@ -1472,9 +1479,10 @@ function App() {
         </div>
         <div className="settings-group">
           <h3>提醒</h3>
+          <PlanReminderSettings />
           <p className="muted">
-            每日设备提醒，不包含个人正文。默认安静时段为 22:00 至次日
-            08:00。当前设备为本地版唯一提醒设备。
+            以下为额外的每日通用提醒，不包含个人正文，时间限 08:00 至
+            21:59。上方固定计划按各自设置的时间提醒。
           </p>
           <Form
             submit="设置每日提醒"
@@ -1537,7 +1545,7 @@ function App() {
             <Leaf size={20} />
           </span>
           <strong>成长蓝图</strong>
-          <p>1.0.0 · 本地版</p>
+          <p>1.1.0 · 天空蓝 · 固定计划与 OSS 备份</p>
           <small>把长期方向，变成今天的一小步。</small>
         </footer>
       </Modal>
@@ -1626,10 +1634,22 @@ function App() {
           onClick={() => setPanel({ type: "sync" })}
         >
           <span className="status-dot" />
-          <span>仅保存在本机</span>
+          <span>
+            {cloud.status.running
+              ? "OSS 备份中"
+              : cloud.status.lastSuccessAt
+                ? "本机已保存 · 有云端备份"
+                : "本机已保存"}
+          </span>
           <ShieldCheck size={14} />
           <span className="status-end">
-            云盘未连接
+            {cloud.status.lastError || !cloud.status.ok
+              ? "备份需处理"
+              : !cloud.status.enabled
+                ? "OSS 未启用"
+                : cloud.status.lastSuccessAt
+                  ? "查看备份"
+                  : "等待首次备份"}
             <ChevronRight size={14} />
           </span>
         </button>
@@ -1877,12 +1897,26 @@ function App() {
                       : "添加行动"}
                   </button>
                 </div>
+                <button
+                  className="button secondary fixed-plan-add"
+                  onClick={() =>
+                    setPanel({
+                      type: "action-form",
+                      personId: current.id,
+                      fixed: true,
+                    })
+                  }
+                >
+                  <CalendarDays size={18} />
+                  添加固定计划
+                </button>
                 <div className="action-toolbar">
                   <div className="chips">
                     {[
                       ["today", "今天"],
                       ["overdue", "逾期待处理"],
-                      ["habits", "习惯"],
+                      ["habits", "固定计划"],
+                      ["history", "完成记录"],
                     ].map(([k, v]) => (
                       <button
                         key={k}
@@ -1902,7 +1936,78 @@ function App() {
                     />
                   )}
                 </div>
-                {actionFilter === "habits" ? (
+                {actionFilter === "history" ? (
+                  <div className="history-list">
+                    <Field
+                      label="完成记录月份"
+                      hint="按计划日期筛选；完成时间另行记录。撤销完成会保留修订日志。"
+                    >
+                      <input
+                        type="month"
+                        value={historyMonth}
+                        onChange={(e) => setHistoryMonth(e.target.value)}
+                      />
+                    </Field>
+                    {state.instances
+                      .filter(
+                        (i) =>
+                          i.done &&
+                          !i.cancelled &&
+                          i.date.startsWith(historyMonth) &&
+                          (selected === "all"
+                            ? people.some((p) => p.id === i.personId)
+                            : i.personId === current.id),
+                      )
+                      .sort((a, b) =>
+                        (b.completedAt ?? "").localeCompare(
+                          a.completedAt ?? "",
+                        ),
+                      )
+                      .map((i) => {
+                        const a = state.actions.find(
+                          (a) => a.id === i.actionId,
+                        )!;
+                        const p = state.persons.find(
+                          (p) => p.id === i.personId,
+                        )!;
+                        return (
+                          <div className="list-row" key={i.id}>
+                            <CheckCircle2 size={22} />
+                            <div>
+                              <strong>{a.title}</strong>
+                              <small>
+                                {p.name} · {repeats[a.repeat.kind]} · 计划{" "}
+                                {i.date}
+                              </small>
+                              <small>
+                                完成于{" "}
+                                {i.completedAt
+                                  ? new Date(i.completedAt).toLocaleString(
+                                      "zh-CN",
+                                      { timeZone: p.timezone },
+                                    )
+                                  : "已完成"}
+                                （{p.timezone}）
+                              </small>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {!state.instances.some(
+                      (i) =>
+                        i.done &&
+                        !i.cancelled &&
+                        i.date.startsWith(historyMonth) &&
+                        (selected === "all"
+                          ? people.some((p) => p.id === i.personId)
+                          : i.personId === current.id),
+                    ) && (
+                      <p className="muted">
+                        这个月还没有完成记录。勾选到期行动后会自动记下完成时间。
+                      </p>
+                    )}
+                  </div>
+                ) : actionFilter === "habits" ? (
                   <div className="action-list">
                     {state.actions
                       .filter(
@@ -1920,10 +2025,25 @@ function App() {
                           <div>
                             <strong>{a.title}</strong>
                             <small>
-                              {repeats[a.repeat.kind]}{" "}
+                              {
+                                state.persons.find((p) => p.id === a.personId)
+                                  ?.name
+                              }{" "}
+                              · {repeats[a.repeat.kind]}{" "}
                               {a.repeat.kind === "weekly"
                                 ? a.repeat.count + " 次"
                                 : ""}{" "}
+                              {a.repeat.kind === "weekdays"
+                                ? " · " +
+                                  a.repeat.weekdays
+                                    .map((v) => "周" + "日一二三四五六"[v])
+                                    .join("、")
+                                : a.repeat.kind === "monthly"
+                                  ? ` · 每月 ${a.repeat.monthDay} 日`
+                                  : ""}
+                              {a.reminderTime
+                                ? ` · ${a.reminderTime} 提醒`
+                                : " · 无提醒"}
                               · {a.paused ? "已暂停" : "进行中"}
                             </small>
                           </div>
@@ -1951,7 +2071,7 @@ function App() {
                       <Empty
                         icon={<RefreshCw size={34} />}
                         title="用稳定的节奏积累"
-                        body="添加每日、每周或自定义间隔的习惯。"
+                        body="为每人添加每日、指定星期或每月固定计划，设置到时提醒。"
                         button="添加一个习惯"
                         onClick={() =>
                           setPanel({

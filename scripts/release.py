@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a locally signed installable release APK. Signing material stays outside Git."""
 from pathlib import Path
-import os, secrets, subprocess, shutil, hashlib
+import os, secrets, subprocess, shutil, hashlib, json
 
 root = Path(__file__).resolve().parents[1]
 tools = Path('/workspace/.tools')
@@ -26,9 +26,11 @@ if not env.get('BLUEPRINT_KEYSTORE'):
         Path(env['BLUEPRINT_KEYSTORE']).chmod(0o600)
 subprocess.run(['npm', 'run', 'build'], cwd=root, env=env, check=True)
 subprocess.run(['bash', 'scripts/android.sh', 'assembleRelease', 'lintRelease'], cwd=root, env=env, check=True)
-apk = root / 'releases/成长蓝图-v1.0.0.apk'
+version = json.loads((root / 'package.json').read_text())['version']
+apk = root / ('releases/成长蓝图-v' + version + '.apk')
 shutil.copy2(root / 'android/app/build/outputs/apk/release/app-release.apk', apk)
+apk.chmod(0o644)
 digest = hashlib.sha256(apk.read_bytes()).hexdigest()
-(apk.parent / 'SHA256SUMS').write_text(digest + '  ' + apk.name + '\n')
+(apk.parent / 'SHA256SUMS').write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in sorted(apk.parent.glob('*.apk'))))
 print('Release APK:', apk)
 print('SHA-256:', digest)

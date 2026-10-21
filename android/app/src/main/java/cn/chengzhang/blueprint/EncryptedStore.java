@@ -23,6 +23,10 @@ public final class EncryptedStore extends SQLiteOpenHelper {
 
     public EncryptedStore(Context context) throws Exception {
         super(context, "blueprint-v1.db", null, 1);
+        key = loadKey(context);
+        setWriteAheadLoggingEnabled(true);
+    }
+    private static synchronized SecretKey loadKey(Context context) throws Exception {
         KeyStore ks = KeyStore.getInstance("AndroidKeyStore"); ks.load(null);
         if (!ks.containsAlias(ALIAS)) {
             // Never silently replace a lost key for an existing database.
@@ -33,8 +37,7 @@ public final class EncryptedStore extends SQLiteOpenHelper {
                     .setRandomizedEncryptionRequired(true).build());
             generator.generateKey();
         }
-        key = (SecretKey)ks.getKey(ALIAS, null);
-        setWriteAheadLoggingEnabled(true);
+        return (SecretKey)ks.getKey(ALIAS, null);
     }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE snapshot (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, nonce BLOB NOT NULL, ciphertext BLOB NOT NULL)");

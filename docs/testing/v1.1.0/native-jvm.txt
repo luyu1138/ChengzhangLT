@@ -1,0 +1,27 @@
+> growth-blueprint@1.1.0 test:native
+> python3 scripts/test-native.py
+
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+PASS OSS V4 PUT matches official aliyun-sdk-oss 3.18.3
+PASS OSS V4 GET matches official aliyun-sdk-oss 3.18.3
+PASS Bucket/region URL injection and unsafe object paths are rejected
+PASS Recovery code must decode to exactly 256 bits
+PASS 42 native recurrence decisions agree with domain.ts fixtures
+PASS Daily reminder uses person's timezone and preserves notification owner/date
+PASS Weekday rule excludes the next unscheduled weekday
+PASS Monthly 31st skips short months
+PASS Completed/cancelled instances do not remind
+PASS Paused, archived and trashed owners do not remind
+PASS Paused linked goal suppresses reminders
+PASS Moved once-only instance reminds on new date, preserving ID
+PASS Weekly N rule stops after today's completion
+PASS DST gap shifts forward; overlap produces one occurrence
+PASS Native portable encryption uses random nonces, preserves TS state and hides plaintext
+PASS Actual HTTP PUT and GET verify identical encrypted bytes
+PASS Corrupt read-back never reports success
+PASS 403 and redirects fail without following or leaking response bodies
+PASS Cancellation prevents sending any request
+Native JVM tests: 19 passed, 0 failed
+PASS native encrypted backup imports through the actual TypeScript restore validator
+PASS tampered native backup is rejected before import

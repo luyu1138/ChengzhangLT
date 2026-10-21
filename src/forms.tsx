@@ -602,18 +602,21 @@ export function ActionForm({
   state,
   personId,
   goalId,
+  fixed = false,
   save,
   onDone,
 }: {
   state: D.State;
   personId: string;
   goalId?: string;
+  fixed?: boolean;
   save: Save;
   onDone: () => void;
 }) {
   const p = D.personOf(state, personId);
-  const [kind, setKind] = useState<D.RepeatKind>("once");
+  const [kind, setKind] = useState<D.RepeatKind>(fixed ? "daily" : "once");
   const [weekdays, setWeekdays] = useState([1, 3, 5]);
+  const [remind, setRemind] = useState(fixed);
   return (
     <Form
       submit="添加行动"
@@ -626,6 +629,7 @@ export function ActionForm({
           date: text(f, "date"),
           end: text(f, "end") || undefined,
           minutes: number(f, "minutes"),
+          reminderTime: remind ? text(f, "reminderTime") : undefined,
           paused: false,
           repeat: {
             kind,
@@ -639,6 +643,7 @@ export function ActionForm({
           updatedAt: D.now(),
         };
         await save((s) => D.saveAction(s, a));
+        if (remind) window.BlueprintNative?.enablePlanNotifications();
         onDone();
       }}
     >
@@ -760,6 +765,32 @@ export function ActionForm({
         <Field label="结束日期（可选）">
           <input name="end" type="date" />
         </Field>
+      )}
+      <label className="check-line">
+        <input
+          type="checkbox"
+          checked={remind}
+          onChange={(e) => setRemind(e.target.checked)}
+        />
+        到时间提醒我
+      </label>
+      {remind && (
+        <Field
+          label="此计划提醒时间"
+          hint={`按${p.name}的时区 ${p.timezone} 提醒；每周 N 次在未完成时每日提醒，其他规则只在计划日提醒。`}
+        >
+          <input
+            type="time"
+            name="reminderTime"
+            required
+            defaultValue="09:00"
+          />
+        </Field>
+      )}
+      {remind && (
+        <p className="muted">
+          保存后请在设置中允许系统通知。开启“准时提醒”可提高时间准确性；省电、关机或强制停止可能延迟提醒。
+        </p>
       )}
     </Form>
   );

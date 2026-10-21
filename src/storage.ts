@@ -14,6 +14,15 @@ declare global {
       scheduleReminder(hour: number, minute: number): string;
       cancelReminder(): void;
       openPrint(html: string): void;
+      reminderStatus(): string;
+      enablePlanNotifications(): string;
+      requestExactReminders(): void;
+      ossStatus(): string;
+      configureOss(json: string): string;
+      disableOss(): string;
+      forgetOss(): string;
+      backupNow(): string;
+      ossRecoveryCode(): string;
     };
   }
 }
