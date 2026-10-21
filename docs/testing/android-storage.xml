@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="cn.chengzhang.blueprint.EncryptedStoreTest" tests="4" failures="0" errors="0" skipped="0" time="13.877" timestamp="2026-10-21T02:55:12" hostname="localhost">
+  <properties>
+    <property name="device" value="emulator-5554 - 15" />
+    <property name="flavor" value="" />
+    <property name="project" value=":app" />
+  </properties>
+  <testcase name="malformedOperationRollsBackSnapshotAndOutbox" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="1.429" />
+  <testcase name="authenticatedCiphertextRejectsCorruption" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.962" />
+  <testcase name="survivesCloseAndReopenWithEncryptedOutbox" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.807" />
+  <testcase name="staleRevisionCannotOverwriteAndNonceIsFresh" classname="cn.chengzhang.blueprint.EncryptedStoreTest" time="0.934" />
+</testsuite>

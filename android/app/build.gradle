@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'cn.chengzhang.blueprint'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'cn.chengzhang.blueprint'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    buildFeatures { buildConfig true }
+    signingConfigs {
+        debug {
+            storeFile file((System.getenv('ANDROID_USER_HOME') ?: (System.getProperty('user.home') + '/.android')) + '/debug.keystore')
+        }
+        localDistribution {
+            if (System.getenv('BLUEPRINT_KEYSTORE')) {
+                storeFile file(System.getenv('BLUEPRINT_KEYSTORE'))
+                storePassword System.getenv('BLUEPRINT_STORE_PASSWORD')
+                keyAlias System.getenv('BLUEPRINT_KEY_ALIAS') ?: 'blueprint'
+                keyPassword System.getenv('BLUEPRINT_KEY_PASSWORD') ?: System.getenv('BLUEPRINT_STORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.localDistribution
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    lint { abortOnError true; checkReleaseBuilds true }
+}
+
+dependencies {
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
