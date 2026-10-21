@@ -2243,6 +2243,10 @@ input[type="checkbox"] {
 .cloud-config .detail-facts p {
   overflow-wrap: anywhere;
 }
+.cloud-config .error-box {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .cloud-config .button-row {
   display: flex;
   flex-wrap: wrap;

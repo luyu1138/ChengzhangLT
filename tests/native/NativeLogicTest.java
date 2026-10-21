@@ -65,10 +65,70 @@ public final class NativeLogicTest {
         Instant signedAt = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC).parse(stamp, Instant::from);
         equal(OssSigner.headers(config, method, key, method.equals("PUT") ? body : null, signedAt).get("Authorization"), request.getHeaders().get("Authorization"));
     }
+    private static OssFailure failure(int status, String method, String body, String requestId) throws Exception {
+        HttpURLConnection connection = new HttpURLConnection(new URL("https://oss.invalid/")) {
+            @Override public void connect() { }
+            @Override public void disconnect() { }
+            @Override public boolean usingProxy() { return false; }
+            @Override public String getHeaderField(String name) { return requestId; }
+            @Override public java.io.InputStream getErrorStream() { return new java.io.ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8)); }
+        };
+        return OssFailure.from(new OssConfig(config()), method, status, connection);
+    }
     public static void main(String[] args) throws Exception {
         Path directory = Path.of(args[0]);
         test("OSS V4 PUT matches official aliyun-sdk-oss 3.18.3", () -> signatureOracle("PUT"));
         test("OSS V4 GET matches official aliyun-sdk-oss 3.18.3", () -> signatureOracle("GET"));
+        test("AccessDenied distinguishes upload permission and download verification permission", () -> {
+            for (String method : new String[]{"PUT", "GET"}) {
+                OssFailure error = failure(403, method, "<Error><Code>AccessDenied</Code><RequestId>0123456789ABCDEF01234567</RequestId></Error>", null);
+                equal(error.code, "AccessDenied"); equal(error.requestId, "0123456789ABCDEF01234567"); equal(error.status, 403);
+                if (!error.getMessage().contains(method.equals("PUT") ? "oss:PutObject" : "oss:GetObject")) throw new AssertionError("wrong permission hint");
+            }
+        });
+        test("Credential, signature, region and clock errors have distinct safe advice", () -> {
+            String[][] cases = {{"InvalidAccessKeyId", "不存在或已停用"}, {"SignatureDoesNotMatch", "签名不匹配"},
+                    {"AuthorizationHeaderMalformed", "实际地域"}, {"RequestTimeTooSkewed", "自动日期时间"}};
+            for (String[] row : cases) {
+                OssFailure error = failure(403, "PUT", "<Error><Code>" + row[0] + "</Code></Error>", "0123456789ABCDEF01234567");
+                equal(error.code, row[0]); if (!error.getMessage().contains(row[1])) throw new AssertionError("missing specific advice");
+            }
+        });
+        test("Reflected secret fields, unknown codes and unsafe request IDs never reach error messages", () -> {
+            String secrets = config().getString("accessKeySecret") + config().getString("accessKeyId") + config().getString("recoveryCode");
+            for (String code : new String[]{"SignatureDoesNotMatch", secrets}) {
+                OssFailure error = failure(403, "PUT", "<Error><Code>" + code + "</Code><Message>" + secrets + "</Message><StringToSign>" + secrets + "</StringToSign><RequestId>" + secrets + "</RequestId></Error>", secrets);
+                String message = error.getMessage();
+                if (message.contains("TestOnly") || message.contains("StringToSign") || message.contains(config().getString("recoveryCode"))) throw new AssertionError("leaked reflected request");
+                equal(error.requestId, "");
+            }
+        });
+        test("Malformed/non-XML errors retain HTTP status without echoing HTML or entities", () -> {
+            OssFailure error = failure(403, "GET", "<!DOCTYPE Error [<!ENTITY x SYSTEM 'file:///secret'>]><Error><Code>&x;</Code></Error><script>private</script>", null);
+            equal(error.code, ""); equal(error.status, 403);
+            if (error.getMessage().contains("private") || error.getMessage().contains("file:")) throw new AssertionError("unsafe response");
+        });
+        test("Error stream reads are capped and read failures cannot hide HTTP status", () -> {
+            AtomicInteger count = new AtomicInteger();
+            HttpURLConnection connection = new HttpURLConnection(new URL("https://oss.invalid/")) {
+                @Override public void connect() { }
+                @Override public void disconnect() { }
+                @Override public boolean usingProxy() { return false; }
+                @Override public java.io.InputStream getErrorStream() {
+                    return new java.io.InputStream() { @Override public int read() { count.incrementAndGet(); return 'x'; } };
+                }
+            };
+            equal(OssFailure.from(new OssConfig(config()), "PUT", 403, connection).status, 403);
+            equal(count.get(), OssFailure.MAX_ERROR_BYTES);
+            connection = new HttpURLConnection(new URL("https://oss.invalid/")) {
+                @Override public void connect() { }
+                @Override public void disconnect() { }
+                @Override public boolean usingProxy() { return false; }
+                @Override public java.io.InputStream getErrorStream() { throw new IllegalStateException("private response"); }
+                @Override public String getHeaderField(String name) { throw new IllegalStateException("private header"); }
+            };
+            equal(OssFailure.from(new OssConfig(config()), "PUT", 403, connection).status, 403);
+        });
         test("Bucket/region URL injection and unsafe object paths are rejected", () -> {
             rejects(IllegalArgumentException.class, () -> new OssConfig(config().put("region", "cn-hangzhou/evil")));
             rejects(IllegalArgumentException.class, () -> new OssConfig(config().put("bucket", "evil.example")));
@@ -128,21 +188,33 @@ public final class NativeLogicTest {
             Files.write(directory.resolve("native.gbp"), a);
         });
         AtomicReference<byte[]> saved = new AtomicReference<>(new byte[0]); AtomicInteger status = new AtomicInteger(200), requests = new AtomicInteger();
-        AtomicReference<Boolean> tamper = new AtomicReference<>(false);
+        AtomicReference<Boolean> tamper = new AtomicReference<>(false), denyRead = new AtomicReference<>(false);
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             requests.incrementAndGet(); byte[] body = exchange.getRequestBody().readAllBytes();
-            if (exchange.getRequestMethod().equals("PUT")) saved.set(body);
+            int responseStatus = denyRead.get() && exchange.getRequestMethod().equals("GET") ? 403 : status.get();
+            if (exchange.getRequestMethod().equals("PUT") && responseStatus == 200) saved.set(body);
             byte[] response = tamper.get() ? new byte[]{1,2,3} : saved.get();
             if (exchange.getRequestMethod().equals("PUT")) response = new byte[0];
+            if (responseStatus == 403) response = "<Error><Code>AccessDenied</Code><Message>TestOnlySecret1234</Message><RequestId>0123456789ABCDEF01234567</RequestId></Error>".getBytes(StandardCharsets.UTF_8);
             if (exchange.getRequestHeaders().getFirst("Authorization") == null) throw new AssertionError("missing V4 signature");
-            exchange.sendResponseHeaders(status.get(), response.length == 0 ? -1 : response.length);
+            exchange.getResponseHeaders().add("x-oss-request-id", "0123456789ABCDEF01234567");
+            exchange.sendResponseHeaders(responseStatus, response.length == 0 ? -1 : response.length);
             exchange.getResponseBody().write(response); exchange.close();
         }); server.start();
         try {
             OssClient client = new OssClient(url -> (HttpURLConnection) new URL("http://127.0.0.1:" + server.getAddress().getPort() + url.getPath()).openConnection());
             OssConfig config = new OssConfig(config()); byte[] body = Files.readAllBytes(directory.resolve("native.gbp"));
             test("Actual HTTP PUT and GET verify identical encrypted bytes", () -> { client.uploadVerified(config, "growth-blueprint/test.gbp", body, () -> {}); equal(requests.get(), 2); });
+            test("Actual GET denial after successful PUT reports read permission, code and request ID", () -> {
+                denyRead.set(true); int before = requests.get();
+                try { client.uploadVerified(config, "growth-blueprint/test.gbp", body, () -> {}); throw new AssertionError("must fail read verification"); }
+                catch (OssFailure error) {
+                    equal(error.method, "GET"); equal(error.code, "AccessDenied"); equal(error.requestId, "0123456789ABCDEF01234567");
+                    if (!error.getMessage().contains("下载校验") || !error.getMessage().contains("oss:GetObject") || error.getMessage().contains("TestOnly")) throw new AssertionError("unsafe or ambiguous error");
+                } finally { denyRead.set(false); }
+                equal(requests.get(), before + 2);
+            });
             test("Corrupt read-back never reports success", () -> { tamper.set(true); rejects(java.io.IOException.class, () -> client.uploadVerified(config, "growth-blueprint/test.gbp", body, () -> {})); tamper.set(false); });
             test("403 and redirects fail without following or leaking response bodies", () -> {
                 for (int code : new int[]{403, 301}) { status.set(code); int before = requests.get(); rejects(java.io.IOException.class, () -> client.uploadVerified(config, "growth-blueprint/test.gbp", body, () -> {})); equal(requests.get(), before + 1); } status.set(200);

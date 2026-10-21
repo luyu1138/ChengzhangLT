@@ -24,7 +24,7 @@ for name, path, digest in artifacts:
 java = Path(os.environ.get('JAVA_HOME', '/workspace/.tools/java')) / 'bin'
 classpath = os.pathsep.join(str(cache / name) for name, _, _ in artifacts)
 source = root / 'android/app/src/main/java/cn/chengzhang/blueprint'
-classes = ['OssConfig', 'OssSigner', 'OssClient', 'PortableBackup', 'ReminderRules']
+classes = ['OssConfig', 'OssSigner', 'OssFailure', 'OssClient', 'PortableBackup', 'ReminderRules']
 with tempfile.TemporaryDirectory(prefix='blueprint-native-') as temporary:
     out = Path(temporary)
     subprocess.run([str(root / 'node_modules/.bin/tsx'), 'tests/native-interop.ts', 'prepare', temporary], cwd=root, check=True)

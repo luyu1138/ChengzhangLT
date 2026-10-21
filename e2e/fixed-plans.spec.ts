@@ -168,3 +168,59 @@ test("OSS native status and configuration UI preserve secrets and do not claim s
   await page.getByRole("button", { name: "暂停每日备份", exact: true }).click();
   await expect(page.getByText("每日备份已暂停", { exact: true })).toBeVisible();
 });
+
+test("OSS failure shows diagnostic status instead of waiting or configuration success", async ({
+  page,
+}) => {
+  await person(page);
+  await page.evaluate(() => {
+    const status = {
+      ok: true,
+      configured: false,
+      enabled: false,
+      running: false,
+      lastSuccessAt: "",
+      lastError: "",
+    };
+    window.BlueprintNative = {
+      ossStatus: () => JSON.stringify(status),
+      configureOss: () => {
+        Object.assign(status, {
+          configured: true,
+          enabled: true,
+          bucket: "blueprint-test-only",
+          region: "cn-hangzhou",
+          lastError:
+            "HTTP 403 · 上传（PUT） · AccessDenied：检查 oss:PutObject 权限。\n请求编号：0123456789ABCDEF01234567",
+        });
+        return '{"ok":true}';
+      },
+    } as unknown as NonNullable<Window["BlueprintNative"]>;
+  });
+  await page.locator(".local-status").click();
+  await page.getByLabel("OSS Bucket 名称").fill("blueprint-test-only");
+  await page.getByLabel("RAM AccessKey ID").fill("TestOnlyAccessKey1234");
+  await page.getByLabel("RAM AccessKey Secret").fill("TestOnlySecret1234");
+  await page.getByRole("checkbox").check();
+  await page
+    .getByRole("button", { name: "启用每日 OSS 备份", exact: true })
+    .click();
+  await expect(
+    page.getByText("最近备份失败 · 等待重试", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("已安排 · 等待首次备份", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/配置已安全保存，首次备份/)).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText("AccessDenied");
+  await expect(page.getByRole("alert")).toContainText(
+    "0123456789ABCDEF01234567",
+  );
+  await expect(page.getByText("尚无成功备份")).toBeVisible();
+  await page.addStyleTag({ content: ":root{font-size:32px}" });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});

@@ -1545,7 +1545,7 @@ function App() {
             <Leaf size={20} />
           </span>
           <strong>成长蓝图</strong>
-          <p>1.1.0 · 天空蓝 · 固定计划与 OSS 备份</p>
+          <p>1.1.1 · 天空蓝 · 固定计划与 OSS 备份</p>
           <small>把长期方向，变成今天的一小步。</small>
         </footer>
       </Modal>

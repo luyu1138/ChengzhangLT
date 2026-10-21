@@ -65,6 +65,7 @@ export function CloudPanel({
   const [code] = useState(recoveryCode);
   const [revealed, setRevealed] = useState("");
   const [message, setMessage] = useState("");
+  const [configurationSaved, setConfigurationSaved] = useState(false);
   const [error, setError] = useState("");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [accessKeySecret, setAccessKeySecret] = useState("");
@@ -73,6 +74,7 @@ export function CloudPanel({
       setError("");
       check(action());
       setMessage(success);
+      setConfigurationSaved(false);
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "操作失败");
@@ -106,9 +108,11 @@ export function CloudPanel({
               ? "尚未配置 · 自动上传未启用"
               : !status.enabled
                 ? "每日备份已暂停"
-                : status.lastSuccessAt
-                  ? "已启用每日备份"
-                  : "已安排 · 等待首次备份"}
+                : status.lastError
+                  ? "最近备份失败 · 等待重试"
+                  : status.lastSuccessAt
+                    ? "已启用每日备份"
+                    : "已安排 · 等待首次备份"}
       </Badge>
       <div className="detail-facts">
         <p>
@@ -135,11 +139,12 @@ export function CloudPanel({
           {error || status.message || status.lastError}
         </p>
       )}
-      {message && (
-        <p role="status" className="form-note">
-          {message}
-        </p>
-      )}
+      {message &&
+        !(configurationSaved && (status.lastError || status.lastSuccessAt)) && (
+          <p role="status" className="form-note">
+            {message}
+          </p>
+        )}
       {!window.BlueprintNative && (
         <p className="warning-box">
           浏览器仅预览界面；请在 Android APK 内配置每日后台备份。
@@ -163,6 +168,7 @@ export function CloudPanel({
           setAccessKeyId("");
           setAccessKeySecret("");
           setError("");
+          setConfigurationSaved(true);
           setMessage(
             "配置已安全保存，首次备份将在网络可用、系统允许时执行。成功前请继续保留本机数据。",
           );

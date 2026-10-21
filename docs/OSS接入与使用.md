@@ -1,6 +1,6 @@
 # OSS 每日加密备份
 
-适用于成长蓝图 Android 1.1.0。无需申请阿里云盘开发者应用。支持个人自用的专用 RAM AccessKey，不使用主账号密钥；尚未提供面向公众分发的 STS 授权服务。
+适用于成长蓝图 Android 1.1.0/1.1.1。无需申请阿里云盘开发者应用。支持个人自用的专用 RAM AccessKey，不使用主账号密钥；尚未提供面向公众分发的 STS 授权服务。
 
 ## 1. 创建私有 Bucket
 
@@ -68,3 +68,26 @@ Android 13+ 需允许通知；设置中可以查看通知和准时提醒状态�
 ## 验收范围
 
 原生 V4 签名已与阿里云官方 Java SDK 3.18.3 比对，传输使用本地 HTTP 测试服务检验，原生加密文件已通过实际 TypeScript 恢复校验。测试使用公开的虚构凭据，不连接真实 OSS。发布记录中的真机通知、真实账户上传/下载、跨日后台执行及换机恢复仍应按实际结果验收，不能仅凭“已启用”判断已完成备份。
+
+
+## 403：如何确认 RAM 权限
+
+配置已保存与请求授权是两个状态。若显示 HTTP 403，服务端拒绝了某次请求；仅凭 1.1.0 的统一文案无法确定根因。
+
+1. RAM 控制台进入“身份管理 → 用户”，选中创建该 AccessKey 的用户。
+2. 在认证/AccessKey 管理中，对照 App 使用的 AccessKey ID，确认属于这个用户且已启用。无需向他人提供 Secret。
+3. 在用户的权限管理中查看直接授权及用户组继承策略，确认包含 Effect=Allow、Action=`oss:PutObject` 与 `oss:GetObject`、Resource=`acs:oss:*:*:YOUR_BUCKET/growth-blueprint/*`，其中 YOUR_BUCKET 必须替换为实际 Bucket 名称。
+4. 自定义策略创建后还需要添加到该用户；仅创建策略不会产生授权。只读策略不能上传。已有完整 OSS 访问策略时，通常已覆盖这两项操作，不需要继续扩大权限。
+5. 核对 Bucket 概览中的实际地域与 App 地域一致，并确认 ID/Secret 为同一对有效 RAM 密钥。已有 Allow 时，显式 Deny、Bucket Policy、访问来源限制等仍可能拒绝请求，应按实际错误码诊断。
+6. 授权生效后，在 App 点“立即备份”。1.1.1 会显示下面的信息；有成功时间才表示完成了回读校验。
+
+| 显示的错误码 | 首先核对 |
+| --- | --- |
+| 上传 PUT + AccessDenied | 上传使用的 RAM 用户、目录 Resource、oss:PutObject，以及 Bucket 限制 |
+| 下载校验 GET + AccessDenied | oss:GetObject；文件可能已上传，但回读未通过，本次不会标记成功 |
+| InvalidAccessKeyId | AccessKey ID 是否有效、启用 |
+| SignatureDoesNotMatch | ID/Secret 是否配对、地域是否正确；配置确认无误时，继续以请求编号排查客户端签名 |
+| AuthorizationHeaderMalformed / InvalidRegion | Bucket 的实际地域代码 |
+| RequestTimeTooSkewed / RequestHasExpired | 手机自动日期时间 |
+
+若需进一步排查，可只提供新版显示的错误码、操作阶段和请求编号。不要发送 AccessKey Secret、恢复码或包含签名/请求原文的完整 OSS 错误响应。安装修正版时覆盖更新以保留本机数据与配置。

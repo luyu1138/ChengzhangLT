@@ -1,0 +1,33 @@
+> growth-blueprint@1.1.1 test:native
+> python3 scripts/test-native.py
+
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+PASS OSS V4 PUT matches official aliyun-sdk-oss 3.18.3
+PASS OSS V4 GET matches official aliyun-sdk-oss 3.18.3
+PASS AccessDenied distinguishes upload permission and download verification permission
+PASS Credential, signature, region and clock errors have distinct safe advice
+PASS Reflected secret fields, unknown codes and unsafe request IDs never reach error messages
+PASS Malformed/non-XML errors retain HTTP status without echoing HTML or entities
+PASS Error stream reads are capped and read failures cannot hide HTTP status
+PASS Bucket/region URL injection and unsafe object paths are rejected
+PASS Recovery code must decode to exactly 256 bits
+PASS 42 native recurrence decisions agree with domain.ts fixtures
+PASS Daily reminder uses person's timezone and preserves notification owner/date
+PASS Weekday rule excludes the next unscheduled weekday
+PASS Monthly 31st skips short months
+PASS Completed/cancelled instances do not remind
+PASS Paused, archived and trashed owners do not remind
+PASS Paused linked goal suppresses reminders
+PASS Moved once-only instance reminds on new date, preserving ID
+PASS Weekly N rule stops after today's completion
+PASS DST gap shifts forward; overlap produces one occurrence
+PASS Native portable encryption uses random nonces, preserves TS state and hides plaintext
+PASS Actual HTTP PUT and GET verify identical encrypted bytes
+PASS Actual GET denial after successful PUT reports read permission, code and request ID
+PASS Corrupt read-back never reports success
+PASS 403 and redirects fail without following or leaking response bodies
+PASS Cancellation prevents sending any request
+Native JVM tests: 25 passed, 0 failed
+PASS native encrypted backup imports through the actual TypeScript restore validator
+PASS tampered native backup is rejected before import

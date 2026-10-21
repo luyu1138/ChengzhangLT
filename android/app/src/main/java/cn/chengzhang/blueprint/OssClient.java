@@ -34,11 +34,7 @@ final class OssClient {
             }
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
-                String message = status == 403 ? "请检查 RAM 密钥、目录读写权限及设备时间" :
-                        status == 404 ? "Bucket 或备份文件不存在" :
-                        status >= 300 && status < 400 ? "请检查 Bucket 所在地域；不会跟随重定向发送凭据" :
-                        status == 429 || status >= 500 ? "OSS 暂时繁忙，将稍后重试" : "OSS 请求未成功，请检查配置";
-                throw new java.io.IOException("HTTP " + status + "：" + message);
+                throw OssFailure.from(config, method, status, connection);
             }
             if (output != null) try (InputStream stream = connection.getInputStream()) {
                 byte[] chunk = new byte[65536]; int n;
